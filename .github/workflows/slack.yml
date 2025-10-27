@@ -1,36 +1,48 @@
-# This is a basic workflow to help you get started with Actions
-
 name: slack
 
-# Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the "main" branch
   pull_request:
     branches: [ "main" ]
-    types: [opened]
 
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
-
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  slack_notification:
+  notify-slack:
     runs-on: ubuntu-latest
     steps:
-      - name: Send Slack notification
-        uses: slackapi/slack-github-action@v1.23.0
+      - name: Send a Slack notification
+        if: always()
+        uses: slackapi/slack-github-action@v1.24.0
         with:
-          slack-webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
           payload: |
             {
-              "text": "GitHub Pull Request Notification",
               "blocks": [
                 {
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "*New Pull Request:* <${{ github.event.pull_request.html_url }}|#${{ github.event.pull_request.number }} - ${{ github.event.pull_request.title }}> by ${{ github.event.pull_request.user.login }}"
+                    "text": "The workflow for *${{ github.repository }}* has been completed for PR #${{ github.event.pull_request.number }}!"
                   }
+                },
+                {
+                  "type": "divider"
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Status:*\n`${{ job.status }}`"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Triggered by:*\n`${{ github.actor }}`"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Pull Request:*\n<${{ github.event.pull_request.html_url }}|#${{ github.event.pull_request.number }}>"
+                    }
+                  ]
                 }
               ]
             }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
