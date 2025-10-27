@@ -1,6 +1,7 @@
 name: slack
 
 on:
+  workflow_dispatch:
   pull_request:
     branches: [ "main" ]
 
