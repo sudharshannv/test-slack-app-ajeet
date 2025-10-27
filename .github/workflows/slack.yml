@@ -7,14 +7,47 @@ on:
     types: [opened]
 
 jobs:
-  call_slack_workflow:
+  notify_slack:
     runs-on: ubuntu-latest
+    concurrency:
+      group: "pr-slack-notify-${{ github.event.pull_request.number || 'unknown' }}"
+      cancel-in-progress: true
+    env:
+      # Pre-encode JSON-safe values using toJson() so we can paste them directly into payload.json
+      PR_URL_JSON: ${{ toJson(github.event.pull_request.html_url) }}
+      PR_TITLE_JSON: ${{ toJson(github.event.pull_request.title) }}
+      PR_AUTHOR_JSON: ${{ toJson(github.event.pull_request.user.login) }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
     steps:
-      - name: Call Slack Workflow webhook
+      - name: Validate webhook secret exists
         run: |
-          curl -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
-            -H 'Content-Type: application/json' \
-            -d '{
-              "pr_url": "${{ github.event.pull_request.html_url }}",
-              "pr_title": "${{ github.event.pull_request.title }}"
-            }'
+          if [ -z "${WEBHOOK:-}" ]; then
+            echo "ERROR: SLACK_WEBHOOK_URL secret is not set."
+            exit 1
+          fi
+
+      - name: Build payload.json safely
+        run: |
+          # PR_*_JSON env vars already contain properly quoted JSON strings (including surrounding quotes)
+          cat > payload.json <<EOF
+{
+  "pr_url": ${PR_URL_JSON},
+  "pr_title": ${PR_TITLE_JSON},
+  "pr_number": ${PR_NUMBER},
+  "pr_author": ${PR_AUTHOR_JSON}
+}
+EOF
+          echo "Built payload.json (first 2 lines shown for debug):"
+          head -n 2 payload.json
+
+      - name: Post payload to Slack Workflow webhook
+        run: |
+          # Use --fail to make the step fail when non-2xx, -sS for readable errors, --data-binary to avoid curl altering payload
+          curl --fail -sS -X POST "${WEBHOOK}" \
+            -H "Content-Type: application/json" \
+            --data-binary @payload.json \
+            --retry 2 --retry-delay 2
+
+      - name: Done
+        run: echo "Slack workflow webhook called for PR #${PR_NUMBER}."
